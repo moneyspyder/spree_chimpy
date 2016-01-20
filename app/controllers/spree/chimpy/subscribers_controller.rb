@@ -6,6 +6,7 @@ class Spree::Chimpy::SubscribersController < ApplicationController
     @subscriber.email = subscriber_params[:email]
     @subscriber.subscribed = subscriber_params[:subscribed]
     if @subscriber.save
+      cookies.permanent[:chimpy_subscribed] = "#{ DateTime.now.strftime("%H.%M_%d-%m-%Y") }"
       flash[:notice] = Spree.t(:success, scope: [:chimpy, :subscriber])
     else
       flash[:error] = Spree.t(:failure, scope: [:chimpy, :subscriber])

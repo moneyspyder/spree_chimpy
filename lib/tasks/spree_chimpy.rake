@@ -6,6 +6,20 @@ namespace :spree_chimpy do
     end
   end
 
+  namespace :subscribers do
+    desc 'send subscribers to mail chimp'
+    task sync: :environment do
+      subscribers = Spree::Chimpy::Subscriber.where(subscribed: nil)
+
+      puts "Exporting #{subscribers.count} subscribers"
+
+      subscribers.each do |subscriber|
+        subscriber.subscribed = true
+        subscriber.save
+      end
+    end
+  end
+
   namespace :orders do
     desc 'sync all orders with mail chimp'
     task sync: :environment do
@@ -18,6 +32,46 @@ namespace :spree_chimpy do
         batch.each do |order|
           begin
             order.notify_mail_chimp
+          rescue => exception
+            if defined?(::Delayed::Job)
+              raise exception
+            else
+              puts exception
+            end
+          end
+        end
+      end
+
+      puts nil, 'done'
+    end
+
+    desc 'send new signups sync their orders with mail chimp'
+    task sync_new: :environment do
+      scope = Spree::Order.complete.where(subscription_sent_at: nil)
+
+      puts "Exporting #{scope.count} orders"
+
+      scope.find_in_batches do |batch|
+        print '.'
+        batch.each do |order|
+
+          begin
+            if order.subscribed
+              if order.user
+                payload = {class: order.user.class.name, id: order.user.id, object: order.user}
+              else
+                payload = {class: order.class.name, id: order.id, object: order}
+              end
+              payload[:event] = :subscribe
+              Spree::Chimpy.perform(payload)
+              order.subscription_sent_at = DateTime.now
+              order.save
+            end
+
+            payload = {class: order.class.name, id: order.id, object: order}
+            payload[:event] = :order
+            Spree::Chimpy.perform(payload)
+
           rescue => exception
             if defined?(::Delayed::Job)
               raise exception
